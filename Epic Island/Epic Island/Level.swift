@@ -8,9 +8,10 @@
 //
 
 import Foundation
+import SpriteKit
 
-let NumColumns = 9
-let NumRows = 9
+let NumColumns = 8
+let NumRows = 8
 
 class Level {
     var targetScore = 0

@@ -8,8 +8,17 @@
 
 import UIKit
 import SpriteKit
+import AVFoundation
+
 
 class GameViewController: UIViewController {
+    
+    lazy var backgroundMusic: AVAudioPlayer = {
+        let url = NSBundle.mainBundle().URLForResource("Mining by Moonlight", withExtension: "mp3")
+        let player = AVAudioPlayer(contentsOfURL: url, error: nil)
+        player.numberOfLoops = -1
+        return player
+        }()
     
     var movesLeft = 0
     var score = 0
@@ -25,24 +34,23 @@ class GameViewController: UIViewController {
     // Needs to be ! because it's not set in init() but in viewDidLoad().
     var level: Level!
     
-    override func prefersStatusBarHidden() -> Bool {
-        return true
-    }
     
-    override func shouldAutorotate() -> Bool {
-        return true
-    }
-    
-    override func supportedInterfaceOrientations() -> Int {
-        return Int(UIInterfaceOrientationMask.AllButUpsideDown.rawValue)
-    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        //self.dismissViewControllerAnimated(true, completion: nil)
         
+        backgroundMusic.play()
+        
+        //if let scene = GameScene.unarchiveFromFileGame("GameScene") as? GameScene {
         // Configure the view.
-        let skView = view as! SKView
+        let skView = self.view as! SKView
+        skView.showsFPS = true
+        skView.showsNodeCount = true
         skView.multipleTouchEnabled = false
+        
+        /* Sprite Kit applies additional optimizations to improve rendering performance */
+        skView.ignoresSiblingOrder = false
         
         // Create and configure the scene.
         scene = GameScene(size: skView.bounds.size)
@@ -54,14 +62,20 @@ class GameViewController: UIViewController {
         scene.addTiles()
         scene.swipeHandler = handleSwipe
         
+        scene.viewController = self
+        
         // Present the scene.
         skView.presentScene(scene)
+        //}
         
         // Let's start the game!
-        beginGame()
+            beginGame()
+        //}
     }
     
     func beginGame() {
+        
+        
         movesLeft = level.maximumMoves
         score = 0
         updateLabels()
@@ -79,6 +93,12 @@ class GameViewController: UIViewController {
         level.resetComboMultiplier()
         level.detectPossibleSwaps()
         view.userInteractionEnabled = true
+        decrementMoves()
+    }
+    
+    func decrementMoves() {
+        --movesLeft
+        updateLabels()
     }
     
     func handleMatches() {
@@ -123,5 +143,22 @@ class GameViewController: UIViewController {
                 self.view.userInteractionEnabled = true
             }
         }
+    }
+    
+    override func prefersStatusBarHidden() -> Bool {
+        return true
+    }
+    
+    override func shouldAutorotate() -> Bool {
+        return true
+    }
+    
+    override func supportedInterfaceOrientations() -> Int {
+        return Int(UIInterfaceOrientationMask.AllButUpsideDown.rawValue)
+    }
+    
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        // Release any cached data, images, etc that aren't in use.
     }
 }

@@ -6,9 +6,13 @@
 //  Copyright (c) 2015 Quest Realm. All rights reserved.
 //
 
+import UIKit
 import SpriteKit
 
 class GameScene: SKScene {
+    
+    weak var viewController: UIViewController?
+    
     // This is marked as ! because it will not initially have a value, but pretty
     // soon after the GameScene is created it will be given a Level object, and
     // from then on it will always have one (it will never be nil again).
@@ -21,11 +25,13 @@ class GameScene: SKScene {
     var swipeHandler: ((Swap) -> ())?
     
     let TileWidth: CGFloat = 32.0
-    let TileHeight: CGFloat = 36.0
+    let TileHeight: CGFloat = 32.0
     
     let gameLayer = SKNode()
     let gemsLayer = SKNode()
     let tilesLayer = SKNode()
+    let cropLayer = SKCropNode()
+    let maskLayer = SKNode()
     
     // The column and row numbers of the cookie that the player first touched
     // when he started his swipe movement. These are marked ? because they may
@@ -43,14 +49,19 @@ class GameScene: SKScene {
     let fallingGemSound = SKAction.playSoundFileNamed("Scrape.wav", waitForCompletion: false)
     let addGemSound = SKAction.playSoundFileNamed("Drip.wav", waitForCompletion: false)
     
-    // MARK: Game Setup
     
+    // MARK: Game Setup
     required init?(coder aDecoder: NSCoder) {
-        fatalError("init(coder) is not used in this app")
+        super.init(coder: aDecoder)
     }
     
     override init(size: CGSize) {
         super.init(size: size)
+        
+    }
+    
+    override func didMoveToView(view: SKView) {
+        super.didMoveToView(view)
         
         anchorPoint = CGPoint(x: 0.5, y: 0.5)
         
@@ -64,24 +75,33 @@ class GameScene: SKScene {
         addChild(gameLayer)
         
         let layerPosition = CGPoint(
-            x: -TileWidth * CGFloat(NumColumns) / 2,
-            y: -TileHeight * CGFloat(NumRows) / 1.2)
+            x: -TileWidth * CGFloat(NumColumns) / 2.0,
+            y: -TileHeight * CGFloat(NumRows) / 2.0)
         
         // The tiles layer represents the shape of the level. It contains a sprite
         // node for each square that is filled in.
         tilesLayer.position = layerPosition
         gameLayer.addChild(tilesLayer)
         
+        gameLayer.addChild(cropLayer)
+ 
+        maskLayer.position = layerPosition
+        cropLayer.maskNode = maskLayer
+        
         // This layer holds the Cookie sprites. The positions of these sprites
         // are relative to the cookiesLayer's bottom-left corner.
         gemsLayer.position = layerPosition
-        gameLayer.addChild(gemsLayer)
+        cropLayer.addChild(gemsLayer)
         
         // nil means that these properties have invalid values.
         swipeFromColumn = nil
         swipeFromRow = nil
         
         SKLabelNode(fontNamed: "GillSans-BoldItalic")
+    }
+    
+    func menuTime(){
+        self.viewController!.performSegueWithIdentifier("menu", sender: MenuViewController())
     }
     
     func addSpritesForGems(gems: Set<Gem>) {
@@ -91,6 +111,21 @@ class GameScene: SKScene {
             sprite.position = pointForColumn(gem.column, row:gem.row)
             gemsLayer.addChild(sprite)
             gem.sprite = sprite
+            
+            // Give each cookie sprite a small, random delay. Then fade them in.
+            sprite.alpha = 0
+            sprite.xScale = 0.5
+            sprite.yScale = 0.5
+            
+            sprite.runAction(
+                SKAction.sequence([
+                    SKAction.waitForDuration(0.25, withRange: 0.5),
+                    SKAction.group([
+                        SKAction.fadeInWithDuration(0.25),
+                        SKAction.scaleTo(1.0, duration: 0.25)
+                    ])
+                ])
+            )
         }
     }
     
@@ -100,9 +135,36 @@ class GameScene: SKScene {
                 
                 // If there is a tile at this position, then create a new tile
                 // sprite and add it to the mask layer.
-                if let tile = level.tileAtColumn(column, row: row) {
-                    let tileNode = SKSpriteNode(imageNamed: "Tile")
+                if let tile = level?.tileAtColumn(column, row: row) {
+                    let tileNode = SKSpriteNode(imageNamed: "MaskTile")
                     tileNode.position = pointForColumn(column, row: row)
+                    maskLayer.addChild(tileNode)
+                }
+            }
+        }
+        for row in 0...NumRows {
+            for column in 0...NumColumns {
+                let topLeft     = (column > 0) && (row < NumRows)
+                                   && level.tileAtColumn(column - 1, row: row) != nil
+                let bottomLeft  = (column > 0) && (row > 0)
+                                   && level.tileAtColumn(column - 1, row: row - 1) != nil
+                let topRight    = (column < NumColumns) && (row < NumRows)
+                                            && level.tileAtColumn(column, row: row) != nil
+                let bottomRight = (column < NumColumns) && (row > 0)
+                                            && level.tileAtColumn(column, row: row - 1) != nil
+ 
+                // The tiles are named from 0 to 15, according to the bitmask that is
+                // made by combining these four values.
+                let value = Int(topLeft) | Int(topRight) << 1 | Int(bottomLeft) << 2 | Int(bottomRight) << 3
+ 
+                // Values 0 (no tiles), 6 and 9 (two opposite tiles) are not drawn.
+                if value != 0 && value != 6 && value != 9 {
+                    let name = String(format: "Tile_%ld", value)
+                    let tileNode = SKSpriteNode(imageNamed: name)
+                    var point = pointForColumn(column, row: row)
+                    point.x -= TileWidth/2
+                    point.y -= TileHeight/2
+                    tileNode.position = point
                     tilesLayer.addChild(tileNode)
                 }
             }
@@ -136,13 +198,23 @@ class GameScene: SKScene {
         // Convert the touch location to a point relative to the cookiesLayer.
         let touch = touches.first as! UITouch
         let location = touch.locationInNode(gemsLayer)
+        var node = self.nodeAtPoint(location)
+        
+        if (node.name == "Menu") {
+            //var gameScene = GameScene(size: self.size)
+            //var transition = SKTransition.flipVerticalWithDuration(1.0)
+            //gameScene.scaleMode = SKSceneScaleMode.AspectFill
+            //self.view?.presentScene(gameScene)
+            menuTime()
+        }
+
         
         // If the touch is inside a square, then this might be the start of a
         // swipe motion.
         let (success, column, row) = convertPoint(location)
         if success {
             // The touch must be on a cookie, not on an empty tile.
-            if let gem = level.gemAtColumn(column, row: row) {
+            if let gem = level?.gemAtColumn(column, row: row) {
                 // Remember in which column and row the swipe started, so we can compare
                 // them later to find the direction of the swipe. This is also the first
                 // cookie that will be swapped.
